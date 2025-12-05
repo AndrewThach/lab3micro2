@@ -1,112 +1,107 @@
-#include <Wire.h>
+//Odey
+#include <Wire.h> 
 #include <RTClib.h>
 #include <LiquidCrystal.h>
+#include <TimerOne.h>   // Kevin
 
-// LCD RS,E,D4,D5,D6,D7
+// LCD RS,E,D4,D5,D6,D7 //Kevin
 LiquidCrystal lcd(7, 8, 9, 10, 11, 12);
 
-// RTC
+//RTC Odey
 RTC_DS1307 rtc;
 
-// Motor (L293D)
-const int EN = 6;
+//MotorL293D Andrew
+const int EN = 6; // switch/speed controller
 const int IN1 = 2;
 const int IN2 = 3;
 
-// Inputs
-const int SOUND = A0;
-const int BUTTON = A1;
+const int SOUND = A0; 
+const int BUTTON = A1; 
 
-// Time (updated by interrupt)
+//Time Kevin
 volatile int h = 0, m = 0, s = 0;
 volatile bool updateLCD = false;
 
-// Direction + speed
+//Direction Start and Speed Andrew
 bool dirCW = true;
-int speedStep = 0;  // 0–3
+int speedStep = 0;
 
-// ---------- PRINT TWO DIGITS ----------
-void p2(int x) {
+void p2(int x) { //Format for time on LCD Kevin
   if (x < 10) lcd.print('0');
   lcd.print(x);
 }
 
-// ---------- TIMER1: 1 SEC ----------
-ISR(TIMER1_COMPA_vect) {
-  if (++s == 60) { s = 0; if (++m == 60) { m = 0; if (++h == 24) h = 0; } }
-  updateLCD = true;
+void timerISR() { //timer Kevin
+  if (++s == 60) { //resets 0 after 60
+    s = 0; 
+    if (++m == 60) { //resets 0 after 60
+      m = 0; 
+      if (++h == 24) h = 0; //resets 0 after 24
+    } 
+  }
+  updateLCD = true; //bool for true
 }
 
-// ---------- TIMER SETUP ----------
-void setupTimer() {
-  noInterrupts();
-  TCCR1A = 0; TCCR1B = 0; TCNT1 = 0;
-  OCR1A = 15624;        // 1 second
-  TCCR1B |= (1 << WGM12) | (1 << CS12) | (1 << CS10);
-  TIMSK1 |= (1 << OCIE1A);
-  interrupts();
-}
 
-// ---------- UPDATE MOTOR ----------
-void driveMotor() {
-  int pwm[] = {0, 120, 180, 255};
-  analogWrite(EN, pwm[speedStep]);
+void driveMotor() { //motor Andrew 
+  int pwm[] = {0, 120, 180, 255}; //rotates in speed
+  analogWrite(EN, pwm[speedStep]); //analog pin write
 
-  digitalWrite(IN1, dirCW ? HIGH : LOW);
+  digitalWrite(IN1, dirCW ? HIGH : LOW); //writes in the serial monitor
   digitalWrite(IN2, dirCW ? LOW : HIGH);
 }
 
-// ---------- LCD ----------
-void showLCD() {
+//LCD Kevin
+void showLCD() { //lcd display
   lcd.clear();
-  lcd.setCursor(0, 0);
-  p2(h); lcd.print(":"); p2(m); lcd.print(":"); p2(s);
+  lcd.setCursor(0, 0); //position
+  p2(h); lcd.print(":"); p2(m); lcd.print(":"); p2(s); //prints on lcd
 
-  lcd.setCursor(0, 1);
-  lcd.print("Dir:"); lcd.print(dirCW ? "C " : "CC ");
+  lcd.setCursor(0, 1); //position
+  lcd.print("Dir:"); lcd.print(dirCW ? "C " : "CC "); //prints on lcd
   lcd.print("Speed:"); lcd.print(speedStep);
 }
 
-// ---------- SETUP ----------
+//setup for the pins
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(9600); //baud rate
 
-  lcd.begin(16, 2);
+  lcd.begin(16, 2); //pins
 
-  pinMode(EN, OUTPUT);
-  pinMode(IN1, OUTPUT);
+  pinMode(EN, OUTPUT); //motor pins Andrew
+  pinMode(IN1, OUTPUT); //dir control 
   pinMode(IN2, OUTPUT);
 
-  pinMode(SOUND, INPUT);
-  pinMode(BUTTON, INPUT_PULLUP);
+  pinMode(SOUND, INPUT); //sound pins Odey
+  pinMode(BUTTON, INPUT_PULLUP); //
 
-  rtc.begin();
-  DateTime now = rtc.now();
-  h = now.hour(); m = now.minute(); s = now.second();
+  rtc.begin(); //rtc Odey
+  DateTime now = rtc.now(); //current time
+  h = now.hour(); 
+  m = now.minute(); 
+  s = now.second();
 
-  setupTimer();
+  
+  Timer1.initialize(1000000); //interrupt 1,000,000 microseconds = 1 second
+  Timer1.attachInterrupt(timerISR); //when 1 second it runs tmerISR
 }
 
-// ---------- LOOP ----------
-void loop() {
-
-  // Button toggles direction
-  static int lastB = HIGH;
-  int b = digitalRead(BUTTON);
-  if (lastB == HIGH && b == LOW) dirCW = !dirCW;
+void loop() { //main loop
+  static int lastB = HIGH; //button
+  int b = digitalRead(BUTTON); 
+  if (lastB == HIGH && b == LOW) dirCW = !dirCW; //button cc and cw
   lastB = b;
 
-  // Sound → speed step
-  int level = analogRead(SOUND);
-  if (level < 40) speedStep = 0;
-  else if (level < 60) speedStep = 1;
-  else if (level < 80) speedStep = 2;
-  else speedStep = 3;
+  int level = analogRead(SOUND); //sound sensor
+  if (level < 40) speedStep = 0; //low
+  else if (level < 60) speedStep = 1; //medium
+  else if (level < 80) speedStep = 2; //high
+  else speedStep = 3; //more than 80 high
 
-  driveMotor();
+  driveMotor(); //motor function
 
-  if (updateLCD) {
-    updateLCD = false;
+  if (updateLCD) { //lcd
+    updateLCD = false; //check the flag
     showLCD();
   }
 
